@@ -51,6 +51,20 @@ def manejar_cliente(conexion, direccion):
                     conexion.sendall(json.dumps(respuesta).encode('utf-8'))
                     print("📤 Respuesta enviada a la app con éxito.")
                     
+                    # --- NUEVA ACCIÓN: get_peers (Tarjeta #10) ---
+                elif mensaje_cliente.get("action") == "get_peers":
+                    # El celular nos está pidiendo la lista de conectados.
+                    print(f"🔍 El celular {direccion[0]} solicitó el directorio de pares.")
+                    
+                    respuesta = {
+                        "status": "success",
+                        "peers": directorio_pares # Aquí metemos todo el diccionario
+                    }
+                    
+                    # Se lo enviamos empaquetado en JSON
+                    conexion.sendall(json.dumps(respuesta).encode('utf-8'))
+                    print("📤 Directorio enviado con éxito.")
+                    
         except json.JSONDecodeError:
             print("❌ Error: Se recibió texto, pero no era un formato JSON válido.")
         except Exception as e:
