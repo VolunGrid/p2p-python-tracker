@@ -1,18 +1,69 @@
 import socket
 import json
+import threading # <-- 1. AÑADIDO PARA MULTITHREADING
 
 # Configuración de conexión
 HOST = '0.0.0.0' 
 PORT = 6881
 
+# 2. NUESTRO DIRECTORIO EN MEMORIA (Tarjeta #9)
+directorio_pares = {}
+
+# 3. NUEVA FUNCIÓN PARA MANEJAR CADA CELULAR POR SEPARADO (Tarjeta #8)
+def manejar_cliente(conexion, direccion):
+    print(f"\n🔗 Nueva conexión detectada desde: {direccion}")
+    with conexion:
+        try:
+            # Recibir los datos (Leemos hasta 1024 bytes)
+            datos_recibidos = conexion.recv(1024)
+            if datos_recibidos:
+                # Intentar decodificar el mensaje como JSON
+                mensaje_cliente = json.loads(datos_recibidos.decode('utf-8'))
+                print(f"📥 App dice: {mensaje_cliente}")
+                
+                # Si es el saludo inicial, respondemos y lo REGISTRAMOS
+                if mensaje_cliente.get("action") == "handshake":
+                    
+                    # Extraemos los datos del JSON que mandó la app
+                    client_id = mensaje_cliente.get("client_id")
+                    
+                    # 🚀 TRUCO P2P: Ignoramos el JSON y sacamos la IP real del socket
+                    ip_local = direccion[0] 
+                    
+                    puerto_escucha = mensaje_cliente.get("puerto_escucha")
+                    
+                    # Lo guardamos en nuestro directorio si mandó su ID
+                    if client_id:
+                        directorio_pares[client_id] = {
+                            "ip": ip_local,
+                            "puerto": puerto_escucha
+                        }
+                        print(f"📗 ¡Nuevo par registrado! Directorio actual:\n {directorio_pares}")
+
+                    # Preparamos la respuesta para la app
+                    respuesta = {
+                        "status": "success",
+                        "message": "Bienvenido al enjambre",
+                        "tracker_version": "1.0.0"
+                    }
+                    
+                    # Convertimos a JSON, luego a bytes, y lo enviamos
+                    conexion.sendall(json.dumps(respuesta).encode('utf-8'))
+                    print("📤 Respuesta enviada a la app con éxito.")
+                    
+        except json.JSONDecodeError:
+            print("❌ Error: Se recibió texto, pero no era un formato JSON válido.")
+        except Exception as e:
+            print(f"❌ Error inesperado con {direccion}: {e}")
+
 def iniciar_tracker():
-    # 1. Crear el socket (AF_INET = IPv4, SOCK_STREAM = protocolo TCP)
+    # Crear el socket (AF_INET = IPv4, SOCK_STREAM = protocolo TCP)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as servidor:
         
-        # 2. Enlazar el socket a nuestra dirección y puerto
+        # Enlazar el socket a nuestra dirección y puerto
         servidor.bind((HOST, PORT))
         
-        # 3. Poner el servidor en modo "escucha"
+        # Poner el servidor en modo "escucha"
         servidor.listen()
         print(f"🚀 Tracker P2P iniciado. Escuchando en {HOST}:{PORT}...")
 
@@ -21,33 +72,10 @@ def iniciar_tracker():
             # 4. Cuando la app se conecta, aceptamos la llamada
             conexion, direccion = servidor.accept()
             
-            with conexion:
-                print(f"\n🔗 Nueva conexión detectada desde: {direccion}")
-                
-                # 5. Recibir los datos (Leemos hasta 1024 bytes)
-                datos_recibidos = conexion.recv(1024)
-                if not datos_recibidos:
-                    continue
-                
-                # 6. Intentar decodificar el mensaje como JSON
-                try:
-                    mensaje_cliente = json.loads(datos_recibidos.decode('utf-8'))
-                    print(f"📥 App dice: {mensaje_cliente}")
-                    
-                    # 7. Si es el saludo inicial, respondemos usando el Contrato
-                    if mensaje_cliente.get("action") == "handshake":
-                        respuesta = {
-                            "status": "success",
-                            "message": "Bienvenido al enjambre",
-                            "tracker_version": "1.0.0"
-                        }
-                        
-                        # Convertimos el diccionario a JSON, luego a bytes, y lo enviamos
-                        conexion.sendall(json.dumps(respuesta).encode('utf-8'))
-                        print("📤 Respuesta enviada a la app con éxito.")
-                        
-                except json.JSONDecodeError:
-                    print("❌ Error: Se recibió texto, pero no era un formato JSON válido.")
+            # 5. EN VEZ DE ATENDERLO DIRECTO, ABRIMOS UN "HILO" NUEVO (Multithreading)
+            # Así el ciclo vuelve a girar inmediatamente para esperar a otro celular
+            hilo = threading.Thread(target=manejar_cliente, args=(conexion, direccion))
+            hilo.start()
 
 if __name__ == "__main__":
     iniciar_tracker()
