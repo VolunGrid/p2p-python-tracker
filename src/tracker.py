@@ -50,21 +50,30 @@ def manejar_cliente(conexion, direccion):
                     # Convertimos a JSON, luego a bytes, y lo enviamos
                     conexion.sendall(json.dumps(respuesta).encode('utf-8'))
                     print("📤 Respuesta enviada a la app con éxito.")
-                    
+
                     # --- NUEVA ACCIÓN: get_peers (Tarjeta #10) ---
                 elif mensaje_cliente.get("action") == "get_peers":
-                    # El celular nos está pidiendo la lista de conectados.
                     print(f"🔍 El celular {direccion[0]} solicitó el directorio de pares.")
-                    
                     respuesta = {
                         "status": "success",
-                        "peers": directorio_pares # Aquí metemos todo el diccionario
+                        "peers": directorio_pares 
                     }
-                    
-                    # Se lo enviamos empaquetado en JSON
                     conexion.sendall(json.dumps(respuesta).encode('utf-8'))
                     print("📤 Directorio enviado con éxito.")
+
+                # --- NUEVA ACCIÓN: disconnect (Tarjeta #11) ---
+                elif mensaje_cliente.get("action") == "disconnect":
+                    client_id = mensaje_cliente.get("client_id")
                     
+                    # Si el celular está en el diccionario, lo borramos con 'del'
+                    if client_id and client_id in directorio_pares:
+                        del directorio_pares[client_id]
+                        print(f"🧹 Limpieza: {client_id} se fue. Directorio actualizado: {directorio_pares}")
+                    
+        # --- MEJORA DE EXCEPCIONES (Tarjeta #11) ---
+        # Esto evita que el servidor crashee si a un celular se le va el WiFi
+        except ConnectionResetError:
+            print(f"⚠️ El dispositivo {direccion[0]} perdió la conexión repentinamente.")
         except json.JSONDecodeError:
             print("❌ Error: Se recibió texto, pero no era un formato JSON válido.")
         except Exception as e:
